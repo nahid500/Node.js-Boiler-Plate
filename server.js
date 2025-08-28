@@ -2,17 +2,30 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import bodyParser from 'body-parser';
 
 import authRoutes from './routes/authRoutes.js';
 import productRoutes from './routes/productRoutes.js';
 import newsletterRoutes from './routes/newsletterRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
+import stripeRoutes from './routes/stripeRoutes.js';
 
 dotenv.config();
 
 const app = express();
 
 app.use(cors());
+
+// Important: Use raw body parser *only* for Stripe webhook route
+app.use('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }));
+
+// Middleware to assign rawBody for Stripe webhook verification
+app.use('/api/stripe/webhook', (req, res, next) => {
+  req.rawBody = req.body;
+  next();
+});
+
+// For all other routes (including the rest of Stripe routes) parse JSON normally
 app.use(express.json());
 
 // Routes
@@ -20,9 +33,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/orders', orderRoutes);
-
-
-
+app.use('/api/stripe', stripeRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
