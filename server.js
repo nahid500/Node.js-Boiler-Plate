@@ -29,6 +29,10 @@ app.use('/api/stripe/webhook', (req, res, next) => {
 app.use(express.json());
 
 // Routes
+
+app.get('/', (req, res) => {
+  res.send('API is running 🚀');
+});
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/newsletter', newsletterRoutes);
