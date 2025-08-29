@@ -1,8 +1,6 @@
-// controllers/stripeController.js
-
-import Stripe from 'stripe';
-import Order from '../models/Order.js';
-import dotenv from 'dotenv';
+import Stripe from "stripe";
+import Order from "../models/Order.js";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -11,31 +9,31 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 export const createCheckoutSession = async (req, res) => {
   try {
     const { orderId } = req.body;
-    if (!orderId) return res.status(400).json({ message: 'Order ID is required' });
+    if (!orderId) return res.status(400).json({ message: "Order ID is required" });
 
-    const order = await Order.findById(orderId).populate('orderItems.product');
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    const order = await Order.findById(orderId).populate("orderItems.product");
+    if (!order) return res.status(404).json({ message: "Order not found" });
 
-    if (order.paymentStatus === 'paid') {
-      return res.status(400).json({ message: 'Order already paid' });
+    if (order.paymentStatus === "paid") {
+      return res.status(400).json({ message: "Order already paid" });
     }
 
-    // Prepare Stripe line items from order items
-    const lineItems = order.orderItems.map(item => ({
+    // Prepare line items for Stripe checkout
+    const lineItems = order.orderItems.map((item) => ({
       price_data: {
-        currency: 'usd',
+        currency: "usd",
         product_data: {
           name: item.product.name,
-          // Add description/images if needed
         },
         unit_amount: Math.round(item.product.price * 100),
       },
       quantity: item.quantity,
     }));
 
+    // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      mode: 'payment',
+      payment_method_types: ["card"],
+      mode: "payment",
       line_items: lineItems,
       metadata: {
         orderId: order._id.toString(),
@@ -45,58 +43,51 @@ export const createCheckoutSession = async (req, res) => {
       cancel_url: `${process.env.CLIENT_URL}/order/cancel`,
     });
 
-    // Save session id to order
+    // Save Stripe session ID to order for reference
     order.paymentIntentId = session.id;
     await order.save();
 
     res.json({ sessionId: session.id });
   } catch (error) {
-    console.error('Stripe session creation failed:', error);
-    res.status(500).json({ message: 'Failed to create checkout session' });
+    console.error("Stripe session creation failed:", error);
+    res.status(500).json({ message: "Failed to create checkout session" });
   }
 };
 
-
-// controllers/stripeController.js (add or replace webhook handler)
-
 export const stripeWebhook = async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-
+  const sig = req.headers["stripe-signature"];
   let event;
+
   try {
-    event = stripe.webhooks.constructEvent(req.rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
+    console.error("Webhook signature verification failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  if (event.type === 'checkout.session.completed') {
+  if (event.type === "checkout.session.completed") {
     const session = event.data.object;
 
     try {
       const order = await Order.findById(session.metadata.orderId);
       if (!order) {
-        console.error('Order not found for session:', session.id);
-        return res.status(404).send('Order not found');
+        console.error("Order not found for session:", session.id);
+        return res.status(404).send("Order not found");
       }
 
-      order.paymentStatus = 'paid';
-      order.orderStatus = 'on-process';
+      order.paymentStatus = "paid";
+      order.orderStatus = "on-process";
       await order.save();
 
-      console.log('✅ Order updated:', order._id);
+      console.log("✅ Order updated:", order._id);
     } catch (err) {
-      console.error('❌ Error updating order:', err.message);
-      return res.status(500).send('Server error');
+      console.error("❌ Error updating order:", err.message);
+      return res.status(500).send("Server error");
     }
   }
 
   res.json({ received: true });
 };
-
-
-
-
 
 
 
