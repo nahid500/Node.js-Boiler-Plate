@@ -46,6 +46,7 @@ export const createOrderAndCheckoutSession = async (req, res) => {
         orderId: createdOrder._id.toString(),
       },
       success_url: `${process.env.CLIENT_URL}/order-success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${process.env.CLIENT_URL}/success`,
       cancel_url: `${process.env.CLIENT_URL}/order-cancelled`,
     });
 
