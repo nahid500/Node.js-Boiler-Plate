@@ -1,31 +1,6 @@
 import Order from '../models/Order.js';
 
 // User places an order
-// export const createOrder = async (req, res) => {
-//   try {
-//     const { orderItems, totalPrice } = req.body;
-
-//     if (!orderItems || orderItems.length === 0) {
-//       return res.status(400).json({ message: 'No order items' });
-//     }
-
-//     const order = new Order({
-//       user: req.user._id,
-//       orderItems,
-//       totalPrice,
-//       paymentStatus: 'pending',
-//       orderStatus: 'pending',
-//     });
-
-//     const createdOrder = await order.save();
-//     res.status(201).json(createdOrder);
-//   } catch (error) {
-//     res.status(500).json({ message: error.message });
-//   }
-// };
-
-
-// User places an order
 export const createOrder = async (req, res) => {
   try {
     const { orderItems, totalPrice } = req.body;
@@ -43,14 +18,15 @@ export const createOrder = async (req, res) => {
     });
 
     const createdOrder = await order.save();
+
+    // Return the created order, including _id (important for Stripe session)
     res.status(201).json(createdOrder);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-
-// User fetches own orders
+// User fetches own orders (populates product name and price)
 export const getUserOrders = async (req, res) => {
   try {
     const orders = await Order.find({ user: req.user._id })
@@ -62,7 +38,7 @@ export const getUserOrders = async (req, res) => {
   }
 };
 
-// Admin fetches all orders
+// Admin fetches all orders (populates user info and product details)
 export const getAllOrders = async (req, res) => {
   try {
     const orders = await Order.find()
@@ -75,7 +51,7 @@ export const getAllOrders = async (req, res) => {
   }
 };
 
-// Admin updates order & payment status
+// Admin updates order and payment status
 export const updateOrderStatus = async (req, res) => {
   const { id } = req.params;
   const { orderStatus, paymentStatus } = req.body;
