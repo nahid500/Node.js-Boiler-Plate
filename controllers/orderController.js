@@ -1,6 +1,31 @@
 import Order from '../models/Order.js';
 
 // User places an order
+// export const createOrder = async (req, res) => {
+//   try {
+//     const { orderItems, totalPrice } = req.body;
+
+//     if (!orderItems || orderItems.length === 0) {
+//       return res.status(400).json({ message: 'No order items' });
+//     }
+
+//     const order = new Order({
+//       user: req.user._id,
+//       orderItems,
+//       totalPrice,
+//       paymentStatus: 'pending',
+//       orderStatus: 'pending',
+//     });
+
+//     const createdOrder = await order.save();
+//     res.status(201).json(createdOrder);
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// };
+
+
+// User places an order
 export const createOrder = async (req, res) => {
   try {
     const { orderItems, totalPrice } = req.body;
@@ -23,6 +48,7 @@ export const createOrder = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 // User fetches own orders
 export const getUserOrders = async (req, res) => {

@@ -1,13 +1,19 @@
-// routes/stripeRoutes.js
 import express from 'express';
-import { createPaymentIntent, stripeWebhook } from '../controllers/stripeController.js';
+import {
+  createCheckoutSession,
+  stripeWebhook,
+} from '../controllers/stripeController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.post('/create-payment-intent', protect, createPaymentIntent);
+// Removed: createPaymentIntent (no longer used)
+// router.post('/create-payment-intent', protect, createPaymentIntent);
 
-// Stripe webhook must receive raw body
+// ✅ Use Checkout Session instead
+router.post('/create-checkout-session', protect, createCheckoutSession);
+
+// Stripe webhook must receive raw body for signature verification
 router.post('/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
 
 export default router;
