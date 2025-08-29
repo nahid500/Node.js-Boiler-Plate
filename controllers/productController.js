@@ -1,18 +1,23 @@
 import Product from '../models/Product.js';
 import cloudinary from '../utils/cloudinary.js';
 
-// Helper to upload image buffer to Cloudinary
-const streamUpload = (buffer) =>
-  new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: 'products' },
-      (error, result) => {
-        if (result) resolve(result);
-        else reject(error);
-      }
-    );
-    stream.end(buffer);
-  });
+// Upload multiple images to Cloudinary
+const streamUploadMultiple = (files) => {
+  return Promise.all(
+    files.map((file) => {
+      return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: 'products' },
+          (error, result) => {
+            if (result) resolve(result.secure_url);
+            else reject(error);
+          }
+        );
+        stream.end(file.buffer);
+      });
+    })
+  );
+};
 
 export const getProducts = async (req, res) => {
   try {
@@ -35,26 +40,33 @@ export const getProduct = async (req, res) => {
 
 export const createProduct = async (req, res) => {
   try {
+    const { name, desc, price, featured, eggs, behavior, size, lifespan } = req.body;
+    const priceNum = Number(price);
+    const featuredBool = featured === 'true' || featured === true;
 
-    // console.log('Received body:', req.body);  
-    // console.log('Received file:', req.file);  
-
-    let img = '';
-
-    if (req.file) {
-      const result = await streamUpload(req.file.buffer);
-      // console.log('Cloudinary upload result:', result);
-
-      img = result.secure_url;
+    if (!name || isNaN(priceNum) || priceNum < 0) {
+      return res.status(400).json({ message: 'Invalid product data' });
     }
 
-    const { name, desc, price, featured } = req.body;
+    let imgUrls = [];
+    if (req.files && req.files.length > 0) {
+      try {
+        imgUrls = await streamUploadMultiple(req.files);
+      } catch (err) {
+        return res.status(500).json({ message: 'Image upload failed', error: err.message });
+      }
+    }
+
     const product = new Product({
       name,
       desc,
-      price,
-      imgUrl: img,
-      featured,
+      price: priceNum,
+      imgUrls,
+      featured: featuredBool,
+      eggs,
+      behavior,
+      size,
+      lifespan,
     });
 
     const savedProduct = await product.save();
@@ -66,23 +78,40 @@ export const createProduct = async (req, res) => {
 
 export const updateProduct = async (req, res) => {
   try {
-    const { name, desc, price, featured } = req.body;
-
+    const { name, desc, price, featured, eggs, behavior, size, lifespan } = req.body;
     const product = await Product.findById(req.params.id);
+
     if (!product) return res.status(404).json({ message: 'Product not found' });
 
-    if (req.file) {
-      const result = await streamUpload(req.file.buffer);
-      product.img = result.secure_url;
+    if (req.files && req.files.length > 0) {
+      try {
+        const newImgUrls = await streamUploadMultiple(req.files);
+        product.imgUrls = [...product.imgUrls, ...newImgUrls]; // Append or replace as needed
+      } catch (err) {
+        return res.status(500).json({ message: 'Image upload failed', error: err.message });
+      }
     }
 
-    product.name = name ?? product.name;
-    product.desc = desc ?? product.desc;
-    product.price = price ?? product.price;
-    product.featured = featured ?? product.featured;
+    if (name) product.name = name;
+    if (desc) product.desc = desc;
+    if (eggs) product.eggs = eggs;
+    if (behavior) product.behavior = behavior;
+    if (size) product.size = size;
+    if (lifespan) product.lifespan = lifespan;
+
+    if (price !== undefined) {
+      const priceNum = Number(price);
+      if (isNaN(priceNum) || priceNum < 0) {
+        return res.status(400).json({ message: 'Invalid price value' });
+      }
+      product.price = priceNum;
+    }
+
+    if (featured !== undefined) {
+      product.featured = featured === 'true' || featured === true;
+    }
 
     await product.save();
-
     res.json(product);
   } catch (error) {
     res.status(500).json({ message: error.message });

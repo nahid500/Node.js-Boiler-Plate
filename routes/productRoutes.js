@@ -7,7 +7,6 @@ import {
   updateProduct,
   deleteProduct,
 } from '../controllers/productController.js';
-
 import { protect, admin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -15,9 +14,9 @@ const router = express.Router();
 router.get('/', getProducts);
 router.get('/:id', getProduct);
 
-// Protect these routes and allow only admin
-router.post('/', protect, admin, upload.single('image'), createProduct);
-router.put('/:id', protect, admin, upload.single('image'), updateProduct);
+// Use upload.array for multiple images
+router.post('/', protect, admin, upload.array('images', 5), createProduct);
+router.put('/:id', protect, admin, upload.array('images', 5), updateProduct);
 router.delete('/:id', protect, admin, deleteProduct);
 
 export default router;

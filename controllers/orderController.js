@@ -1,7 +1,12 @@
 import Order from '../models/Order.js';
+import Stripe from 'stripe';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// User places an order
-export const createOrder = async (req, res) => {
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+// Create order AND create Stripe checkout session
+export const createOrderAndCheckoutSession = async (req, res) => {
   try {
     const { orderItems, totalPrice } = req.body;
 
@@ -9,6 +14,7 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: 'No order items' });
     }
 
+    // 1. Create order in DB with paymentStatus 'pending'
     const order = new Order({
       user: req.user._id,
       orderItems,
@@ -19,14 +25,39 @@ export const createOrder = async (req, res) => {
 
     const createdOrder = await order.save();
 
-    // Return the created order, including _id (important for Stripe session)
-    res.status(201).json(createdOrder);
+    // 2. Create Stripe checkout session
+    const line_items = orderItems.map(item => ({
+      price_data: {
+        currency: 'usd',
+        product_data: {
+          name: item.productName || 'Product', // You can send productName from frontend or populate it before
+        },
+        unit_amount: Math.round(item.price * 100), // price in cents
+      },
+      quantity: item.quantity,
+    }));
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items,
+      mode: 'payment',
+      customer_email: req.user.email, // Optional: prefill email
+      metadata: {
+        orderId: createdOrder._id.toString(),
+      },
+      success_url: `${process.env.CLIENT_URL}/order-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.CLIENT_URL}/order-cancelled`,
+    });
+
+    // 3. Send Stripe session ID to frontend
+    res.status(201).json({ order: createdOrder, sessionId: session.id });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// User fetches own orders (populates product name and price)
+// Get orders of logged-in user
 export const getUserOrders = async (req, res) => {
   try {
     const orders = await Order.find({ user: req.user._id })
@@ -38,7 +69,7 @@ export const getUserOrders = async (req, res) => {
   }
 };
 
-// Admin fetches all orders (populates user info and product details)
+// Get all orders (admin)
 export const getAllOrders = async (req, res) => {
   try {
     const orders = await Order.find()
@@ -51,7 +82,7 @@ export const getAllOrders = async (req, res) => {
   }
 };
 
-// Admin updates order and payment status
+// Update order and payment status (admin)
 export const updateOrderStatus = async (req, res) => {
   const { id } = req.params;
   const { orderStatus, paymentStatus } = req.body;
@@ -162,4 +193,87 @@ export const getIncomeSummary = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+// Stripe webhook handler
+export const stripeWebhook = async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.error('Webhook signature verification failed.', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Handle the event
+  switch (event.type) {
+    case 'checkout.session.completed':
+      {
+        const session = event.data.object;
+        const orderId = session.metadata.orderId;
+
+        if (!orderId) {
+          console.error('No orderId in session metadata');
+          break;
+        }
+
+        try {
+          const order = await Order.findById(orderId);
+          if (!order) {
+            console.error('Order not found for ID:', orderId);
+            break;
+          }
+
+          order.paymentStatus = 'paid';
+          order.orderStatus = 'on-process';
+          order.paymentIntentId = session.payment_intent;
+
+          await order.save();
+          console.log(`Order ${orderId} payment completed.`);
+        } catch (err) {
+          console.error('Error updating order after payment:', err);
+        }
+      }
+      break;
+
+    case 'checkout.session.expired':
+    case 'payment_intent.payment_failed':
+      {
+        const session = event.data.object;
+        const orderId = session.metadata?.orderId;
+
+        if (!orderId) {
+          console.error('No orderId in session metadata for failed payment');
+          break;
+        }
+
+        try {
+          const order = await Order.findById(orderId);
+          if (!order) {
+            console.error('Order not found for ID:', orderId);
+            break;
+          }
+
+          order.paymentStatus = 'failed';
+          order.orderStatus = 'pending';
+          await order.save();
+          console.log(`Order ${orderId} payment failed.`);
+        } catch (err) {
+          console.error('Error updating order after failed payment:', err);
+        }
+      }
+      break;
+
+    default:
+      // Unexpected event type
+      console.warn(`Unhandled event type ${event.type}`);
+  }
+
+  res.json({ received: true });
 };
