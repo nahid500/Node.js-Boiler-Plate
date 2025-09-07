@@ -1,3 +1,4 @@
+// utils/emailService.js
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -10,18 +11,38 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// Newsletter Subscription Email (optional)
 export const sendSubscriptionEmail = async (toEmail) => {
   try {
-    const info = await transporter.sendMail({
+    await transporter.sendMail({
       from: `"Chicken Farm" <${process.env.EMAIL_USER}>`,
       to: toEmail,
       subject: 'Thank you for subscribing!',
-      text: 'Welcome to our newsletter. You’ll now receive updates on our best chicken breeds and offers!',
+      text: 'Welcome to our newsletter!',
       html: `<h2>Welcome to Chicken Farm 🐔</h2><p>You’ll now receive updates on our best chicken breeds and offers!</p>`,
     });
-
-    // console.log('Email sent:', info.response);
   } catch (error) {
-    console.error('Email sending failed:', error.message);
+    console.error('Newsletter email failed:', error.message);
+  }
+};
+
+// Send PDF Receipt Email ONLY
+export const sendReceiptEmailWithPDF = async ({ toEmail, order, pdfBuffer }) => {
+  try {
+    await transporter.sendMail({
+      from: `"Chicken Farm" <${process.env.EMAIL_USER}>`,
+      to: toEmail,
+      subject: `Your Receipt for Order ${order._id}`,
+      text: `Thank you for your purchase! Please find your receipt attached.`,
+      attachments: [
+        {
+          filename: `receipt-${order._id}.pdf`,
+          content: pdfBuffer,
+        },
+      ],
+    });
+    console.log('✅ Receipt email sent:', toEmail);
+  } catch (error) {
+    console.error('❌ Failed to send receipt email:', error.message);
   }
 };

@@ -1,6 +1,7 @@
 import Order from '../models/Order.js';
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
+import { sendOrderConfirmationEmail } from '../utils/emailService.js';  // import email function
 dotenv.config();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -45,7 +46,6 @@ export const createOrderAndCheckoutSession = async (req, res) => {
       metadata: {
         orderId: createdOrder._id.toString(),
       },
-      // success_url: `${process.env.CLIENT_URL}/order-success?session_id={CHECKOUT_SESSION_ID}`,
       success_url: `${process.env.CLIENT_URL}/success`,
       cancel_url: `${process.env.CLIENT_URL}/order-cancelled`,
     });
@@ -212,67 +212,74 @@ export const stripeWebhook = async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Handle the event
   switch (event.type) {
-    case 'checkout.session.completed':
-      {
-        const session = event.data.object;
-        const orderId = session.metadata.orderId;
+    case 'checkout.session.completed': {
+      const session = event.data.object;
+      const orderId = session.metadata.orderId;
 
-        if (!orderId) {
-          console.error('No orderId in session metadata');
+      if (!orderId) {
+        console.error('No orderId in session metadata');
+        break;
+      }
+
+      try {
+        const order = await Order.findById(orderId).populate('user');
+        if (!order) {
+          console.error('Order not found for ID:', orderId);
           break;
         }
 
-        try {
-          const order = await Order.findById(orderId);
-          if (!order) {
-            console.error('Order not found for ID:', orderId);
-            break;
-          }
+        order.paymentStatus = 'paid';
+        order.orderStatus = 'on-process';
+        order.paymentIntentId = session.payment_intent;
 
-          order.paymentStatus = 'paid';
-          order.orderStatus = 'on-process';
-          order.paymentIntentId = session.payment_intent;
+        await order.save();
 
-          await order.save();
-          console.log(`Order ${orderId} payment completed.`);
-        } catch (err) {
-          console.error('Error updating order after payment:', err);
-        }
+        // Generate PDF buffer using your PDF utility
+        const pdfBuffer = await generatePDF(order);
+
+        // Send email with PDF receipt attached
+        await sendReceiptEmailWithPDF({
+          toEmail: order.user.email,
+          order,
+          pdfBuffer,
+        });
+
+        console.log(`Order ${orderId} payment completed and PDF receipt email sent.`);
+      } catch (err) {
+        console.error('Error updating order after payment:', err);
       }
       break;
+    }
 
     case 'checkout.session.expired':
-    case 'payment_intent.payment_failed':
-      {
-        const session = event.data.object;
-        const orderId = session.metadata?.orderId;
+    case 'payment_intent.payment_failed': {
+      const session = event.data.object;
+      const orderId = session.metadata?.orderId;
 
-        if (!orderId) {
-          console.error('No orderId in session metadata for failed payment');
+      if (!orderId) {
+        console.error('No orderId in session metadata for failed payment');
+        break;
+      }
+
+      try {
+        const order = await Order.findById(orderId);
+        if (!order) {
+          console.error('Order not found for ID:', orderId);
           break;
         }
 
-        try {
-          const order = await Order.findById(orderId);
-          if (!order) {
-            console.error('Order not found for ID:', orderId);
-            break;
-          }
-
-          order.paymentStatus = 'failed';
-          order.orderStatus = 'pending';
-          await order.save();
-          console.log(`Order ${orderId} payment failed.`);
-        } catch (err) {
-          console.error('Error updating order after failed payment:', err);
-        }
+        order.paymentStatus = 'failed';
+        order.orderStatus = 'pending';
+        await order.save();
+        console.log(`Order ${orderId} payment failed.`);
+      } catch (err) {
+        console.error('Error updating order after failed payment:', err);
       }
       break;
+    }
 
     default:
-      // Unexpected event type
       console.warn(`Unhandled event type ${event.type}`);
   }
 
