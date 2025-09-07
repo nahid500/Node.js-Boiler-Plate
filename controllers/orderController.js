@@ -1,7 +1,7 @@
 import Order from '../models/Order.js';
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
-import { sendOrderConfirmationEmail } from '../utils/emailService.js';  // import email function
+// import { sendOrderConfirmationEmail } from '../utils/sendEmail.js'
 dotenv.config();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -15,7 +15,6 @@ export const createOrderAndCheckoutSession = async (req, res) => {
       return res.status(400).json({ message: 'No order items' });
     }
 
-    // 1. Create order in DB with paymentStatus 'pending'
     const order = new Order({
       user: req.user._id,
       orderItems,
@@ -26,14 +25,13 @@ export const createOrderAndCheckoutSession = async (req, res) => {
 
     const createdOrder = await order.save();
 
-    // 2. Create Stripe checkout session
     const line_items = orderItems.map(item => ({
       price_data: {
         currency: 'usd',
         product_data: {
-          name: item.productName || 'Product', // You can send productName from frontend or populate it before
+          name: item.productName || 'Product',
         },
-        unit_amount: Math.round(item.price * 100), // price in cents
+        unit_amount: Math.round(item.price * 100),
       },
       quantity: item.quantity,
     }));
@@ -42,15 +40,12 @@ export const createOrderAndCheckoutSession = async (req, res) => {
       payment_method_types: ['card'],
       line_items,
       mode: 'payment',
-      customer_email: req.user.email, // Optional: prefill email
-      metadata: {
-        orderId: createdOrder._id.toString(),
-      },
+      customer_email: req.user.email,
+      metadata: { orderId: createdOrder._id.toString() },
       success_url: `${process.env.CLIENT_URL}/success`,
       cancel_url: `${process.env.CLIENT_URL}/order-cancelled`,
     });
 
-    // 3. Send Stripe session ID to frontend
     res.status(201).json({ order: createdOrder, sessionId: session.id });
   } catch (error) {
     console.error(error);
