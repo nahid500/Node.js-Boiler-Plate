@@ -7,18 +7,72 @@ dotenv.config();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Create order AND create Stripe checkout session
+// export const createOrderAndCheckoutSession = async (req, res) => {
+//   try {
+//     const { orderItems, totalPrice } = req.body;
+
+//     if (!orderItems || orderItems.length === 0) {
+//       return res.status(400).json({ message: 'No order items' });
+//     }
+
+//     const order = new Order({
+//       user: req.user._id,
+//       orderItems,
+//       totalPrice,
+//       paymentStatus: 'pending',
+//       orderStatus: 'pending',
+//     });
+
+//     const createdOrder = await order.save();
+
+//     const line_items = orderItems.map(item => ({
+//       price_data: {
+//         currency: 'usd',
+//         product_data: {
+//           name: item.productName || 'Product',
+//         },
+//         unit_amount: Math.round(item.price * 100),
+//       },
+//       quantity: item.quantity,
+//     }));
+
+//     const session = await stripe.checkout.sessions.create({
+//       payment_method_types: ['card'],
+//       line_items,
+//       mode: 'payment',
+//       customer_email: req.user.email,
+//       metadata: { orderId: createdOrder._id.toString() },
+//       success_url: `${process.env.CLIENT_URL}/success`,
+//       cancel_url: `${process.env.CLIENT_URL}/order-cancelled`,
+//     });
+
+//     res.status(201).json({ order: createdOrder, sessionId: session.id });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ message: error.message });
+//   }
+// };
+
 export const createOrderAndCheckoutSession = async (req, res) => {
   try {
-    const { orderItems, totalPrice } = req.body;
+    const { orderItems, totalPrice, name, phone, address, paymentMethod } = req.body;
 
     if (!orderItems || orderItems.length === 0) {
       return res.status(400).json({ message: 'No order items' });
     }
 
+    if (!name || !phone || !address) {
+      return res.status(400).json({ message: 'Missing customer information' });
+    }
+
     const order = new Order({
       user: req.user._id,
+      name,
+      phone,
+      address,
       orderItems,
       totalPrice,
+      paymentMethod,
       paymentStatus: 'pending',
       orderStatus: 'pending',
     });
@@ -29,6 +83,7 @@ export const createOrderAndCheckoutSession = async (req, res) => {
       price_data: {
         currency: 'usd',
         product_data: {
+          // Ideally fetch product name from DB or pass it from frontend
           name: item.productName || 'Product',
         },
         unit_amount: Math.round(item.price * 100),
@@ -48,10 +103,11 @@ export const createOrderAndCheckoutSession = async (req, res) => {
 
     res.status(201).json({ order: createdOrder, sessionId: session.id });
   } catch (error) {
-    console.error(error);
+    console.error('Error in createOrderAndCheckoutSession:', error);
     res.status(500).json({ message: error.message });
   }
 };
+
 
 // Get orders of logged-in user
 export const getUserOrders = async (req, res) => {
