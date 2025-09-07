@@ -11,11 +11,13 @@ const router = express.Router();
 // Create order and Stripe checkout session
 router.post('/create-checkout-session', protect, createOrderAndCheckoutSession);
 
-// Stripe webhook (no auth, raw body needed)
-router.post(
-  '/webhook',
-  express.raw({ type: 'application/json' }),
-  stripeWebhook
-);
+router.post('/webhook', stripeWebhook);
+
+// // Stripe webhook (no auth, raw body needed)
+// router.post(
+//   '/webhook',
+//   express.raw({ type: 'application/json' }),
+//   stripeWebhook
+// );
 
 export default router;

@@ -17,8 +17,7 @@ const app = express();
 // ✅ Enable CORS for all origins (customize as needed)
 app.use(cors());
 
-// ✅ FIRST: JSON parser for all non-webhook routes
-app.use(express.json()); // applies to everything below this line
+
 
 // ✅ Stripe webhook must receive raw body for signature check
 app.use('/api/stripe/webhook',
@@ -28,6 +27,10 @@ app.use('/api/stripe/webhook',
     next();
   }
 );
+
+
+// ✅ FIRST: JSON parser for all non-webhook routes
+app.use(express.json()); // applies to everything below this line
 
 // ✅ Routes
 app.get('/', (req, res) => {
